@@ -1,0 +1,46 @@
+---
+- name: Install git and clone application repository
+  hosts: app_servers
+  become: false
+
+  tasks:
+    - name: Install Git
+      become: true
+      ansible.builtin.package:
+        name: git
+        state: present
+
+    - name: Check repository SSH private key
+      ansible.builtin.stat:
+        path: "{{ repo_key_file }}"
+      register: repo_private_key
+      when: repo_key_file | length > 0
+
+    - name: Require repository SSH private key
+      ansible.builtin.assert:
+        that:
+          - repo_private_key.stat.exists
+          - repo_private_key.stat.isreg
+        fail_msg: >-
+          Private SSH key {{ repo_key_file }} was not found on the server.
+          Use the private key without the .pub suffix.
+      when: repo_key_file | length > 0
+
+    - name: Protect repository SSH private key
+      become: true
+      ansible.builtin.file:
+        path: "{{ repo_key_file }}"
+        owner: "{{ ansible_user }}"
+        mode: "0600"
+      when: repo_key_file | length > 0
+
+    - name: Clone or update application repository
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_version }}"
+        update: true
+        force: false
+        accept_hostkey: true
+        key_file: "{{ repo_key_file if repo_key_file | length > 0 else omit }}"
+      register: repository

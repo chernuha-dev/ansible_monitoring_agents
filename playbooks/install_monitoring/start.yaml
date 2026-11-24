@@ -1,0 +1,68 @@
+---
+- name: Deploy monitoring stack
+  hosts: app_servers
+  become: false
+
+  vars:
+    export_dir: "{{ playbook_dir }}/export"
+
+  tasks:
+    - name: Check files exported from Ansible controller
+      delegate_to: localhost
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ export_dir }}/.env"
+        - "{{ export_dir }}/allowlist.conf"
+      register: exported_files
+
+    - name: Require files exported from Ansible controller
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+        fail_msg: >-
+          Local file {{ item.item }} is missing.
+          Create it from the matching .example file in {{ export_dir }}.
+      loop: "{{ exported_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Ensure remote Nginx configuration directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}/nginx"
+        state: directory
+        mode: "0755"
+
+    - name: Copy environment file to server
+      ansible.builtin.copy:
+        src: "{{ export_dir }}/.env"
+        dest: "{{ app_dir }}/.env"
+        mode: "0600"
+
+    - name: Copy Nginx allowlist to server
+      ansible.builtin.copy:
+        src: "{{ export_dir }}/allowlist.conf"
+        dest: "{{ app_dir }}/nginx/allowlist.conf"
+        mode: "0644"
+
+    - name: Start Docker Compose project
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+        pull: "{{ compose_pull_policy }}"
+        remove_orphans: true
+
+    - name: Read deployed revision
+      ansible.builtin.command:
+        argv:
+          - git
+          - rev-parse
+          - HEAD
+        chdir: "{{ app_dir }}"
+      register: deployed_revision
+      changed_when: false
+
+    - name: Show deployed revision
+      ansible.builtin.debug:
+        msg: "Deployed {{ deployed_revision.stdout }} to {{ app_dir }}"

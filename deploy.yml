@@ -1,0 +1,4 @@
+---
+- import_playbook: playbooks/install_monitoring/docker.yaml
+- import_playbook: playbooks/install_monitoring/git.yaml
+- import_playbook: playbooks/install_monitoring/start.yaml

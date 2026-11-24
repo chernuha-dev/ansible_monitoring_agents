@@ -1,0 +1,21 @@
+---
+# репозиторий с compose.yml или docker-compose.yml.
+repo_url: "git@github.com:Codefather-Studio/monitoring_agent.git"
+repo_version: "main"
+
+# репозиторий будет клонирован в $HOME указанного в inventory SSH-пользователя.
+repo_directory: "monitoring_agent"
+app_dir: "{{ ansible_facts['env']['HOME'] }}/{{ repo_directory }}"
+
+# Приватный ключ на сервере, имеющий доступ к репозиторию. Файл .pub сюда не подходит.
+repo_key_file: "{{ ansible_facts['env']['HOME'] }}/.ssh/id_ed25519"
+
+# скрипт установки докера
+docker_install_script_url: "https://get.docker.com/"
+docker_install_script_path: "/tmp/get-docker.sh"
+
+# политика загрузки дорке образов
+compose_pull_policy: "always"
+
+# каталог с Prometheus file-based service discovery конфигами
+monitoring_config_dir: "/root/mon/prometheus/file_sd"

@@ -1,0 +1,62 @@
+---
+- name: Install and configure Docker
+  hosts: app_servers
+  become: false
+
+  tasks:
+    - name: Check whether Docker is installed
+      ansible.builtin.command:
+        argv:
+          - docker
+          - --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker when it is missing
+      become: true
+      when: docker_check.rc != 0
+      block:
+        - name: Download official Docker installation script
+          ansible.builtin.get_url:
+            url: "{{ docker_install_script_url }}"
+            dest: "{{ docker_install_script_path }}"
+            owner: root
+            group: root
+            mode: "0700"
+            force: true
+
+        - name: Run official Docker installation script
+          ansible.builtin.command:
+            argv:
+              - /bin/sh
+              - "{{ docker_install_script_path }}"
+
+      always:
+        - name: Remove downloaded Docker installation script
+          ansible.builtin.file:
+            path: "{{ docker_install_script_path }}"
+            state: absent
+
+    - name: Enable and start Docker
+      become: true
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add SSH user to Docker group
+      become: true
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups:
+          - docker
+        append: true
+      register: docker_group
+      when: ansible_user != "root"
+
+    - name: Reconnect after changing SSH user groups
+      ansible.builtin.meta: reset_connection
+      when:
+        - ansible_user != "root"
+        - docker_group is changed

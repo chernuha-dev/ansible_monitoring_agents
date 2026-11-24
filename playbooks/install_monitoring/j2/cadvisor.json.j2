@@ -1,0 +1,8 @@
+{% set current = [] %}
+{% for host in groups['app_servers'] %}
+{% set _ = current.append({
+  'targets': [hostvars[host].ansible_host ~ ':' ~ cadvisor_port],
+  'labels': {'instance': host}
+}) %}
+{% endfor %}
+{{ (current + existing_cadvisor_targets) | unique(attribute='labels.instance') | list | to_nice_json }}

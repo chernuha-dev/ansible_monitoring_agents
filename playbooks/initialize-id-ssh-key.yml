@@ -1,0 +1,60 @@
+---
+- name: Ensure SSH key for Git repository access exists
+  hosts: proxmox_vms
+  become: false
+
+  tasks:
+    - name: Check whether repository SSH key already exists
+      ansible.builtin.stat:
+        path: "{{ repo_key_file }}"
+      register: repo_key_stat
+
+    - name: Ensure .ssh directory exists
+      ansible.builtin.file:
+        path: "{{ repo_key_file | dirname }}"
+        state: directory
+        mode: "0700"
+      when: not repo_key_stat.stat.exists
+
+    - name: Generate ED25519 SSH key for Git repository access
+      ansible.builtin.command:
+        argv:
+          - ssh-keygen
+          - -t
+          - ed25519
+          - -f
+          - "{{ repo_key_file }}"
+          - -N
+          - ""
+          - -C
+          - "{{ ansible_user }}@{{ inventory_hostname }}"
+      when: not repo_key_stat.stat.exists
+
+    - name: Test SSH access to GitHub using repository key
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - "{{ repo_key_file }}"
+          - -o
+          - IdentitiesOnly=yes
+          - -o
+          - BatchMode=yes
+          - -o
+          - StrictHostKeyChecking=accept-new
+          - -T
+          - git@github.com
+      register: github_ssh_check
+      changed_when: false
+      failed_when: false
+
+    - name: Read public key when GitHub rejects it
+      ansible.builtin.slurp:
+        src: "{{ repo_key_file }}.pub"
+      register: repo_public_key
+      when: "'Permission denied' in github_ssh_check.stderr"
+
+    - name: Show host and public key to add as Git deploy key
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ repo_public_key.content | b64decode | trim }}"
+      when: "'Permission denied' in github_ssh_check.stderr"

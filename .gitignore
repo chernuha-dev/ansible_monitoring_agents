@@ -1,0 +1,8 @@
+*.retry
+.ansible/
+inventory.ini
+playbooks/install_monitoring/export/.env
+playbooks/install_monitoring/export/allowlist.conf
+/node-exporter.json
+/cadvisor.json
+

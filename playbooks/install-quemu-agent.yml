@@ -1,0 +1,10 @@
+- name: Install quemu guest agent to proxmox vms
+  hosts: proxmox_vms
+  become: false
+
+  tasks:
+  - name: Install Quemu guest agent
+    become: true
+    ansible.builtin.package:
+      name: qemu-guest-agent
+      state: present

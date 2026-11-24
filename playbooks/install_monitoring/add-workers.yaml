@@ -1,0 +1,69 @@
+---
+- name: Generate json configs for prometheus
+  hosts: grafana
+  gather_facts: false
+  become: false
+
+  vars:
+    node_exporter_config_path: "{{ monitoring_config_dir }}/node-exporter.json"
+    cadvisor_config_path: "{{ monitoring_config_dir }}/cadvisor.json"
+
+  tasks:
+    - name: Ensure Prometheus file_sd directory exists
+      ansible.builtin.file:
+        path: "{{ monitoring_config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Read exporter ports from local .env
+      ansible.builtin.set_fact:
+        cadvisor_port: "{{ lookup('ansible.builtin.ini', 'CADVISOR_PORT', type='properties', file=playbook_dir + '/export/.env') }}"
+        node_exporter_port: "{{ lookup('ansible.builtin.ini', 'NODE_EXPORTER_PORT', type='properties', file=playbook_dir + '/export/.env') }}"
+      run_once: true
+
+    - name: Validate exporter ports
+      ansible.builtin.assert:
+        that:
+          - cadvisor_port is match('^[0-9]+$')
+          - node_exporter_port is match('^[0-9]+$')
+        fail_msg: CADVISOR_PORT and NODE_EXPORTER_PORT must be numeric in export/.env
+      run_once: true
+
+    - name: Check existing node-exporter config
+      ansible.builtin.stat:
+        path: "{{ node_exporter_config_path }}"
+      register: node_exporter_config
+
+    - name: Read existing node-exporter config
+      ansible.builtin.slurp:
+        src: "{{ node_exporter_config_path }}"
+      when: node_exporter_config.stat.exists
+      register: node_exporter_content
+
+    - name: Check existing cAdvisor config
+      ansible.builtin.stat:
+        path: "{{ cadvisor_config_path }}"
+      register: cadvisor_config
+
+    - name: Read existing cAdvisor config
+      ansible.builtin.slurp:
+        src: "{{ cadvisor_config_path }}"
+      when: cadvisor_config.stat.exists
+      register: cadvisor_content
+
+    - name: Store existing targets
+      ansible.builtin.set_fact:
+        existing_node_exporter_targets: "{{ (node_exporter_content.content | b64decode | from_json) if node_exporter_config.stat.exists else [] }}"
+        existing_cadvisor_targets: "{{ (cadvisor_content.content | b64decode | from_json) if cadvisor_config.stat.exists else [] }}"
+
+    - name: Generate node-exporter targets
+      ansible.builtin.template:
+        src: j2/node-exporter.json.j2
+        dest: "{{ node_exporter_config_path }}"
+        mode: "0644"
+
+    - name: Generate cadvisor targets
+      ansible.builtin.template:
+        src: j2/cadvisor.json.j2
+        dest: "{{ cadvisor_config_path }}"
+        mode: "0644"
